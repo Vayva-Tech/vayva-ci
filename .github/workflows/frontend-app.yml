@@ -50,7 +50,7 @@ jobs:
           pnpm --version
 
       - name: Setup workspace
-        uses: Vayva-Tech/vayva-ci/.github/actions/setup-workspace@main
+        uses: ./.github/actions/setup-workspace
         with:
           token: ${{ secrets.NPM_TOKEN }}
 
@@ -94,7 +94,7 @@ jobs:
           pnpm --version
 
       - name: Setup workspace
-        uses: Vayva-Tech/vayva-ci/.github/actions/setup-workspace@main
+        uses: ./.github/actions/setup-workspace
         with:
           token: ${{ secrets.NPM_TOKEN }}
 
