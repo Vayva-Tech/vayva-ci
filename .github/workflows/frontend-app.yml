@@ -1,0 +1,184 @@
+name: Vayva Frontend App CI
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        description: App name (e.g. vayva-merchant)
+        required: true
+        type: string
+      build-env:
+        description: Build-time env vars (KEY=VALUE per line, e.g. NEXT_PUBLIC_APP_URL=...)
+        required: false
+        default: ''
+        type: string
+    secrets:
+      NPM_TOKEN:
+        required: true
+      REGISTRY_URL:
+        required: true
+      REGISTRY_USERNAME:
+        required: true
+      REGISTRY_PASSWORD:
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  quality:
+    name: Quality (typecheck + lint + test)
+    runs-on: self-hosted
+    env:
+      PNPM_MINIMUM_RELEASE_AGE: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Activate pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+          pnpm --version
+
+      - name: Setup workspace
+        uses: Vayva-Tech/vayva-ci/.github/actions/setup-workspace@main
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install & build shared
+        run: |
+          rm -f pnpm-lock.yaml
+          pnpm install --no-frozen-lockfile --config.minimum-release-age=0
+          pnpm --config.minimum-release-age=0 --filter "./vayva-*" build
+
+      - name: Typecheck
+        run: pnpm --config.minimum-release-age=0 typecheck
+
+      - name: Lint
+        run: pnpm --config.minimum-release-age=0 lint
+
+      - name: Test
+        run: pnpm --config.minimum-release-age=0 test
+        continue-on-error: true
+
+  build-and-push:
+    name: Build & Push
+    runs-on: self-hosted
+    needs: [quality]
+    env:
+      PNPM_MINIMUM_RELEASE_AGE: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Activate pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+          pnpm --version
+
+      - name: Setup workspace
+        uses: Vayva-Tech/vayva-ci/.github/actions/setup-workspace@main
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install & build shared
+        run: |
+          rm -f pnpm-lock.yaml
+          pnpm install --no-frozen-lockfile --config.minimum-release-age=0
+          pnpm --config.minimum-release-age=0 --filter "./vayva-*" build
+
+      - name: Build Next.js
+        env:
+          BUILD_ENV: ${{ inputs.build-env }}
+        run: |
+          while IFS= read -r line; do
+            [ -n "$line" ] && export "$line"
+          done <<< "$BUILD_ENV"
+          pnpm --config.minimum-release-age=0 build
+
+      - name: Prepare Docker build context
+        env:
+          APP: ${{ inputs.app-name }}
+          CROSS_REPO_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -e
+          CTX="/tmp/docker-context"
+          rm -rf "$CTX"
+          mkdir -p "$CTX/$APP"
+          for item in $(ls -A "$GITHUB_WORKSPACE"); do
+            mv "$GITHUB_WORKSPACE/$item" "$CTX/$APP/"
+          done
+          PACKAGES=(
+            vayva-shared vayva-schemas vayva-middleware vayva-auth-middleware
+            vayva-redis vayva-event-bus vayva-email vayva-compliance
+            vayva-sdk vayva-plan-entitlements vayva-personalization
+            vayva-semantic-layer vayva-ui
+          )
+          for pkg in "${PACKAGES[@]}"; do
+            git clone --depth 1 "https://x-access-token:${CROSS_REPO_TOKEN}@github.com/Vayva-Tech/$pkg.git" "$CTX/$pkg"
+          done
+
+      - name: Docker build
+        env:
+          APP: ${{ inputs.app-name }}
+          SHA: ${{ github.sha }}
+          REGISTRY: ${{ secrets.REGISTRY_URL }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          docker build \
+            --build-arg NODE_AUTH_TOKEN="$NPM_TOKEN" \
+            -t "vayva-ci/$APP:$SHA" \
+            -t "$REGISTRY/$APP:sha-$SHA" \
+            -t "$REGISTRY/$APP:sha-latest" \
+            -f "/tmp/docker-context/$APP/Dockerfile" \
+            /tmp/docker-context
+
+      - name: Push to registry (main only)
+        env:
+          APP: ${{ inputs.app-name }}
+          SHA: ${{ github.sha }}
+          REGISTRY: ${{ secrets.REGISTRY_URL }}
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
+            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login "$REGISTRY" -u "${{ secrets.REGISTRY_USERNAME }}" --password-stdin
+            docker push "$REGISTRY/$APP:sha-$SHA"
+            docker push "$REGISTRY/$APP:sha-latest"
+            echo "Pushed $REGISTRY/$APP:sha-$SHA"
+            echo "Pushed $REGISTRY/$APP:sha-latest"
+          else
+            echo "Skipping registry push (not main push)"
+          fi
+
+      - name: Docker cleanup
+        if: always()
+        env:
+          APP: ${{ inputs.app-name }}
+          SHA: ${{ github.sha }}
+          REGISTRY: ${{ secrets.REGISTRY_URL }}
+        run: |
+          docker rmi "vayva-ci/$APP:$SHA" "$REGISTRY/$APP:sha-$SHA" "$REGISTRY/$APP:sha-latest" 2>/dev/null || true
+          rm -rf /tmp/docker-context
+
+      - name: Runner disk guard
+        if: always()
+        run: |
+          df -h / | tail -1
+          USAGE=$(df / --output=pcent | tail -1 | tr -dc '0-9')
+          if [ "$USAGE" -gt 80 ]; then docker image prune -f; fi

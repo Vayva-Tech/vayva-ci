@@ -1,0 +1,164 @@
+name: Vayva Backend Service CI
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        description: Service name (e.g. identity-service)
+        required: true
+        type: string
+      service-port:
+        description: Port for smoke test
+        required: true
+        type: number
+      smoke-extra-env:
+        description: Additional env vars for smoke test (KEY=VALUE per line)
+        required: false
+        default: ''
+        type: string
+    secrets:
+      NPM_TOKEN:
+        required: true
+      REGISTRY_URL:
+        required: true
+      REGISTRY_USERNAME:
+        required: true
+      REGISTRY_PASSWORD:
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ci:
+    name: CI
+    runs-on: self-hosted
+    env:
+      PNPM_MINIMUM_RELEASE_AGE: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Activate pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+          pnpm --version
+
+      - name: Setup workspace
+        uses: Vayva-Tech/vayva-ci/.github/actions/setup-workspace@main
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile --config.minimum-release-age=0 --trust-lockfile
+
+      - name: Lint
+        run: pnpm --config.minimum-release-age=0 lint
+
+      - name: Typecheck
+        run: pnpm --config.minimum-release-age=0 typecheck
+
+      - name: Test
+        run: pnpm --config.minimum-release-age=0 test
+
+      - name: Build
+        run: pnpm --config.minimum-release-age=0 build
+
+      - name: Runner disk guard
+        run: |
+          df -h / | tail -1
+          USAGE=$(df / --output=pcent | tail -1 | tr -dc '0-9')
+          if [ "$USAGE" -gt 80 ]; then docker image prune -f; fi
+
+      - name: Docker build
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          SERVICE: ${{ inputs.service-name }}
+          SHA: ${{ github.sha }}
+          REGISTRY: ${{ secrets.REGISTRY_URL }}
+        run: |
+          printf '//npm.pkg.github.com/:_authToken=%s' "$NPM_TOKEN" > $GITHUB_WORKSPACE/.npm-token
+          docker build \
+            --secret id=vayva_npm_token,src=$GITHUB_WORKSPACE/.npm-token \
+            -t "vayva-ci/$SERVICE:$SHA" \
+            -t "$REGISTRY/$SERVICE:sha-$SHA" \
+            -t "$REGISTRY/$SERVICE:sha-latest" \
+            .
+          rm -f $GITHUB_WORKSPACE/.npm-token
+
+      - name: Container smoke test
+        env:
+          SERVICE: ${{ inputs.service-name }}
+          SHA: ${{ github.sha }}
+          PORT: ${{ inputs.service-port }}
+          SMOKE_EXTRA: ${{ inputs.smoke-extra-env }}
+        run: |
+          JWT_PRIV=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null | openssl pkcs8 -topk8 -nocrypt 2>/dev/null)
+          JWT_PUB=$(echo "$JWT_PRIV" | openssl pkey -pubout 2>/dev/null)
+
+          EXTRA_FLAGS=""
+          if [ -n "$SMOKE_EXTRA" ]; then
+            while IFS= read -r line; do
+              [ -n "$line" ] && EXTRA_FLAGS="$EXTRA_FLAGS -e $line"
+            done <<< "$SMOKE_EXTRA"
+          fi
+
+          CID=$(docker run -d -p ${PORT}:${PORT} \
+            -e PORT=${PORT} \
+            -e NODE_ENV=production \
+            -e DATABASE_URL="postgresql://vayva:vayva@127.0.0.1:1/vayva_smoke" \
+            -e REDIS_URL="redis://127.0.0.1:1" \
+            -e ENABLE_SERVICE_AUTH="false" \
+            -e JWT_PUBLIC_KEY="$JWT_PUB" \
+            -e JWT_PRIVATE_KEY="$JWT_PRIV" \
+            -e EVENT_SIGNING_SECRET="ci-test-signing-secret-do-not-use-in-prod" \
+            $EXTRA_FLAGS \
+            --name "vayva-smoke-${SERVICE}" \
+            "vayva-ci/$SERVICE:$SHA")
+
+          for i in $(seq 1 15); do
+            sleep 2
+            if ! docker ps -q --filter id="$CID" | grep -q .; then
+              echo "CONTAINER EXITED — logs follow:"
+              docker logs "$CID" 2>&1 | tail -40
+              docker rm -f "$CID" > /dev/null
+              exit 1
+            fi
+          done
+          docker logs "$CID" 2>&1 | tail -15
+          docker rm -f "$CID" > /dev/null
+          echo "Smoke test passed — container booted and stayed alive"
+
+      - name: Push to registry (main only)
+        env:
+          SERVICE: ${{ inputs.service-name }}
+          SHA: ${{ github.sha }}
+          REGISTRY: ${{ secrets.REGISTRY_URL }}
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
+            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login "$REGISTRY" -u "${{ secrets.REGISTRY_USERNAME }}" --password-stdin
+            docker push "$REGISTRY/$SERVICE:sha-$SHA"
+            docker push "$REGISTRY/$SERVICE:sha-latest"
+            echo "Pushed $REGISTRY/$SERVICE:sha-$SHA"
+            echo "Pushed $REGISTRY/$SERVICE:sha-latest"
+          else
+            echo "Skipping registry push (not main push)"
+          fi
+
+      - name: Docker cleanup
+        if: always()
+        env:
+          SERVICE: ${{ inputs.service-name }}
+          SHA: ${{ github.sha }}
+          REGISTRY: ${{ secrets.REGISTRY_URL }}
+        run: |
+          docker rmi "vayva-ci/$SERVICE:$SHA" "$REGISTRY/$SERVICE:sha-$SHA" "$REGISTRY/$SERVICE:sha-latest" 2>/dev/null || true
