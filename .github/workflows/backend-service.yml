@@ -53,10 +53,8 @@ jobs:
           corepack prepare pnpm@11.25.0 --activate
           pnpm --version
 
-      - name: Setup workspace
-        uses: ./.github/actions/setup-workspace
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
+      - name: Authenticate private registry
+        run: echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
 
       - name: Install
         run: pnpm install --no-frozen-lockfile --config.minimum-release-age=0 --trust-lockfile
