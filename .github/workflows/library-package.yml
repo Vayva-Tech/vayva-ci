@@ -9,7 +9,7 @@ on:
         type: string
     secrets:
       NPM_TOKEN:
-        required: false
+        required: true
 
 permissions:
   contents: read
@@ -38,7 +38,6 @@ jobs:
           pnpm --version
 
       - name: Authenticate private registry
-        if: ${{ secrets.NPM_TOKEN }}
         run: |
           echo "@vayva-tech:registry=https://npm.pkg.github.com/" >> .npmrc
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
