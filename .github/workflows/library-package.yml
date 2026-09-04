@@ -1,0 +1,66 @@
+name: Vayva Library Package CI
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Package name (e.g. vayva-personalization)
+        required: true
+        type: string
+    secrets:
+      NPM_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    runs-on: self-hosted
+    env:
+      PNPM_MINIMUM_RELEASE_AGE: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Activate pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+          pnpm --version
+
+      - name: Authenticate private registry
+        if: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "@vayva-tech:registry=https://npm.pkg.github.com/" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile --config.minimum-release-age=0
+
+      - name: Lint
+        run: pnpm --config.minimum-release-age=0 lint
+
+      - name: Typecheck
+        run: pnpm --config.minimum-release-age=0 typecheck
+
+      - name: Test
+        run: pnpm --config.minimum-release-age=0 test
+
+      - name: Build
+        run: pnpm --config.minimum-release-age=0 build
+
+      - name: Verify package contents
+        run: |
+          pnpm pack --pack-destination /tmp
+          tar -tzf /tmp/*.tgz | grep -q "package/dist/index.js"
+          tar -tzf /tmp/*.tgz | grep -q "package/dist/index.d.ts"
+          rm -f /tmp/*.tgz
