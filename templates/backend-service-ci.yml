@@ -1,0 +1,23 @@
+# Backend service CI — calls Vayva-Tech/vayva-ci reusable workflow
+# Copy this file to .github/workflows/ci.yml in your service repo.
+# Update service-name and service-port to match your service.
+# Add smoke-extra-env only if your service needs extra env vars to boot.
+# Set deploy: true once PROD_SSH_KEY/HOST/USER secrets are configured.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: Vayva-Tech/vayva-ci/.github/workflows/backend-service.yml@main
+    with:
+      service-name: SERVICE_NAME        # e.g. identity-service
+      service-port: 4000                # e.g. 4010 for identity-service
+      # smoke-extra-env: ''             # KEY=VALUE per line if needed
+      # deploy: false                   # set true after adding PROD_SSH_* secrets
+    secrets: inherit

@@ -1,0 +1,18 @@
+# Shared package CI — calls Vayva-Tech/vayva-ci reusable workflow
+# Copy this file to .github/workflows/ci.yml in your package repo.
+# package-name is optional — only needed if your repo name differs from the package name.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: Vayva-Tech/vayva-ci/.github/workflows/library-package.yml@main
+    with:
+      # package-name: vayva-shared    # only if repo name != package name
+    secrets: inherit

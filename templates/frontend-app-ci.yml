@@ -1,0 +1,24 @@
+# Frontend app CI — calls Vayva-Tech/vayva-ci reusable workflow
+# Copy this file to .github/workflows/ci.yml in your app repo.
+# Update app-name to match your app directory name.
+# Add build-env with any NEXT_PUBLIC_* vars needed at build time.
+# Set deploy: true once PROD_SSH_KEY/HOST/USER secrets are configured.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: Vayva-Tech/vayva-ci/.github/workflows/frontend-app.yml@main
+    with:
+      app-name: APP_NAME              # e.g. vayva-merchant
+      # build-env: |                  # uncomment and add build-time env vars
+      #   NEXT_PUBLIC_APP_URL=https://app.vayva.ng
+      #   NEXT_PUBLIC_API_URL=https://api.vayva.ng
+      # deploy: false                 # set true after adding PROD_SSH_* secrets
+    secrets: inherit

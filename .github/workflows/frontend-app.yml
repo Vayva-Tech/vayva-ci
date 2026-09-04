@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       app-name:
-        description: App name (e.g. vayva-merchant)
+        description: App directory name (e.g. vayva-merchant)
         required: true
         type: string
       build-env:
@@ -12,19 +12,27 @@ on:
         required: false
         default: ''
         type: string
+      deploy:
+        description: Deploy to production after successful push
+        required: false
+        type: boolean
+        default: false
     secrets:
-      CROSS_REPO_TOKEN:
+      NPM_TOKEN:
         required: true
-      REGISTRY_URL:
-        required: true
-      REGISTRY_USERNAME:
-        required: true
-      REGISTRY_PASSWORD:
-        required: true
+      PROD_SSH_KEY:
+        required: false
+      PROD_SSH_HOST:
+        required: false
+      PROD_SSH_USER:
+        required: false
 
 permissions:
   contents: read
   packages: write
+
+env:
+  IMAGE_TAG: sha-${{ github.sha }}
 
 jobs:
   quality:
@@ -52,8 +60,8 @@ jobs:
       - name: Authenticate private registry
         run: |
           echo "@vayva-tech:registry=https://npm.pkg.github.com/" >> .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.CROSS_REPO_TOKEN }}" >> .npmrc
-          git config --global url."https://x-access-token:${{ secrets.CROSS_REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+          echo "minimum-release-age=0" >> .npmrc
 
       - name: Install & build shared
         run: |
@@ -62,13 +70,28 @@ jobs:
           pnpm --config.minimum-release-age=0 --filter "./vayva-*" build
 
       - name: Typecheck
-        run: pnpm --config.minimum-release-age=0 typecheck
+        run: |
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['typecheck'] ? 0 : 1)"; then
+            pnpm --config.minimum-release-age=0 typecheck
+          else
+            echo "No typecheck script; skipping"
+          fi
 
       - name: Lint
-        run: pnpm --config.minimum-release-age=0 lint
+        run: |
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['lint'] ? 0 : 1)"; then
+            pnpm --config.minimum-release-age=0 lint
+          else
+            echo "No lint script; skipping"
+          fi
 
       - name: Test
-        run: pnpm --config.minimum-release-age=0 test
+        run: |
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['test'] ? 0 : 1)"; then
+            pnpm --config.minimum-release-age=0 test
+          else
+            echo "No test script; skipping"
+          fi
         continue-on-error: true
 
   build-and-push:
@@ -97,8 +120,9 @@ jobs:
       - name: Authenticate private registry
         run: |
           echo "@vayva-tech:registry=https://npm.pkg.github.com/" >> .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.CROSS_REPO_TOKEN }}" >> .npmrc
-          git config --global url."https://x-access-token:${{ secrets.CROSS_REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+          echo "minimum-release-age=0" >> .npmrc
+          git config --global url."https://x-access-token:${{ secrets.NPM_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install & build shared
         run: |
@@ -115,10 +139,16 @@ jobs:
           done <<< "$BUILD_ENV"
           pnpm --config.minimum-release-age=0 build
 
+      - name: Runner disk guard
+        run: |
+          df -h / | tail -1
+          USAGE=$(df / --output=pcent | tail -1 | tr -dc '0-9')
+          if [ "$USAGE" -gt 80 ]; then docker image prune -f; fi
+
       - name: Prepare Docker build context
         env:
           APP: ${{ inputs.app-name }}
-          CROSS_REPO_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -e
           CTX="/tmp/docker-context"
@@ -134,53 +164,55 @@ jobs:
             vayva-semantic-layer vayva-ui
           )
           for pkg in "${PACKAGES[@]}"; do
-            git clone --depth 1 "https://x-access-token:${CROSS_REPO_TOKEN}@github.com/Vayva-Tech/$pkg.git" "$CTX/$pkg"
+            git clone --depth 1 "https://x-access-token:${NPM_TOKEN}@github.com/Vayva-Tech/$pkg.git" "$CTX/$pkg"
           done
 
       - name: Docker build
         env:
           APP: ${{ inputs.app-name }}
           SHA: ${{ github.sha }}
-          REGISTRY: ${{ secrets.REGISTRY_URL }}
-          NPM_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           docker build \
             --build-arg NODE_AUTH_TOKEN="$NPM_TOKEN" \
-            -t "vayva-ci/$APP:$SHA" \
-            -t "$REGISTRY/$APP:sha-$SHA" \
-            -t "$REGISTRY/$APP:sha-latest" \
-            -f "/tmp/docker-context/$APP/Dockerfile" \
+            -t "ghcr.io/vayva-tech/${APP}:${IMAGE_TAG}" \
+            -t "ghcr.io/vayva-tech/${APP}:sha-latest" \
+            -t "vayva-ci/${APP}:${SHA}" \
+            -f "/tmp/docker-context/${APP}/Dockerfile" \
             /tmp/docker-context
 
-      - name: Push to registry (main only)
+      - name: Push to GHCR (main only)
         env:
           APP: ${{ inputs.app-name }}
           SHA: ${{ github.sha }}
-          REGISTRY: ${{ secrets.REGISTRY_URL }}
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
-            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login "$REGISTRY" -u "${{ secrets.REGISTRY_USERNAME }}" --password-stdin
-            docker push "$REGISTRY/$APP:sha-$SHA"
-            docker push "$REGISTRY/$APP:sha-latest"
-            echo "Pushed $REGISTRY/$APP:sha-$SHA"
-            echo "Pushed $REGISTRY/$APP:sha-latest"
+            echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            docker push "ghcr.io/vayva-tech/${APP}:${IMAGE_TAG}"
+            docker push "ghcr.io/vayva-tech/${APP}:sha-latest"
+            echo "Pushed ghcr.io/vayva-tech/${APP}:${IMAGE_TAG}"
           else
             echo "Skipping registry push (not main push)"
           fi
+
+      - name: Deploy to production
+        if: inputs.deploy && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          APP: ${{ inputs.app-name }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/vayva_prod
+          chmod 600 ~/.ssh/vayva_prod
+          ssh-keyscan -H "${{ secrets.PROD_SSH_HOST }}" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/vayva_prod "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" \
+            "/opt/vayva/scripts/deploy-service.sh '${APP}' '${IMAGE_TAG}'"
 
       - name: Docker cleanup
         if: always()
         env:
           APP: ${{ inputs.app-name }}
           SHA: ${{ github.sha }}
-          REGISTRY: ${{ secrets.REGISTRY_URL }}
         run: |
-          docker rmi "vayva-ci/$APP:$SHA" "$REGISTRY/$APP:sha-$SHA" "$REGISTRY/$APP:sha-latest" 2>/dev/null || true
+          docker rmi "vayva-ci/${APP}:${SHA}" "ghcr.io/vayva-tech/${APP}:${IMAGE_TAG}" "ghcr.io/vayva-tech/${APP}:sha-latest" 2>/dev/null || true
           rm -rf /tmp/docker-context
-
-      - name: Runner disk guard
-        if: always()
-        run: |
-          df -h / | tail -1
-          USAGE=$(df / --output=pcent | tail -1 | tr -dc '0-9')
-          if [ "$USAGE" -gt 80 ]; then docker image prune -f; fi
+          rm -f ~/.ssh/vayva_prod
