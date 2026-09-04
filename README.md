@@ -48,7 +48,7 @@ jobs:
         NEXT_PUBLIC_APP_URL=http://localhost:3000
         NEXT_PUBLIC_IDENTITY_SERVICE_URL=http://localhost:4010
     secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      CROSS_REPO_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
       REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
@@ -65,9 +65,18 @@ jobs:
 
 ## Required GitHub Secrets (per repo)
 
+### Backend services
 | Secret | Purpose |
 |--------|---------|
 | `NPM_TOKEN` | GitHub PAT with read:packages for @vayva-tech scope |
+| `REGISTRY_URL` | Docker registry URL (e.g. 13.140.159.213:5000) |
+| `REGISTRY_USERNAME` | Registry username |
+| `REGISTRY_PASSWORD` | Registry password |
+
+### Frontend apps
+| Secret | Purpose |
+|--------|---------|
+| `CROSS_REPO_TOKEN` | GitHub PAT with repo + read:packages (for git clone, npm auth, Docker build-arg) |
 | `REGISTRY_URL` | Docker registry URL (e.g. 13.140.159.213:5000) |
 | `REGISTRY_USERNAME` | Registry username |
 | `REGISTRY_PASSWORD` | Registry password |
@@ -79,3 +88,11 @@ jobs:
 - Docker build with BuildKit secret mounts (no token in image layers)
 - Immutable image tags: `sha-{commit}` + `sha-latest`
 - Registry push on main branch only
+
+## Migrated Repos (29 total)
+
+### Backend services (25) — `backend-service.yml`
+identity-service, business-service, commerce-service, wallet-service, customer-service, storefront-service, messaging-service, marketing-service, support-service, analytics-service, billing-service, delivery-service, ai-service, connector-service, verification-service, notification-service, onboarding-service, storage-service, ops-service, industry-service, import-service, affiliate-service, workflow-service, personalization-service, semantic-layer-service
+
+### Frontend apps (4) — `frontend-app.yml`
+vayva-merchant, vayva-ops, vayva-marketing, vayva-storefront
