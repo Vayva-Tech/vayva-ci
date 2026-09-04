@@ -13,7 +13,7 @@ on:
         default: ''
         type: string
     secrets:
-      NPM_TOKEN:
+      CROSS_REPO_TOKEN:
         required: true
       REGISTRY_URL:
         required: true
@@ -52,7 +52,7 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          token: ${{ secrets.NPM_TOKEN }}
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
 
       - name: Install & build shared
         run: |
@@ -96,7 +96,7 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          token: ${{ secrets.NPM_TOKEN }}
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
 
       - name: Install & build shared
         run: |
@@ -116,7 +116,7 @@ jobs:
       - name: Prepare Docker build context
         env:
           APP: ${{ inputs.app-name }}
-          CROSS_REPO_TOKEN: ${{ secrets.NPM_TOKEN }}
+          CROSS_REPO_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
         run: |
           set -e
           CTX="/tmp/docker-context"
@@ -140,7 +140,7 @@ jobs:
           APP: ${{ inputs.app-name }}
           SHA: ${{ github.sha }}
           REGISTRY: ${{ secrets.REGISTRY_URL }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
         run: |
           docker build \
             --build-arg NODE_AUTH_TOKEN="$NPM_TOKEN" \
