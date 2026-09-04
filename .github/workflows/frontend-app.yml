@@ -49,10 +49,11 @@ jobs:
           corepack prepare pnpm@11.25.0 --activate
           pnpm --version
 
-      - name: Setup workspace
-        uses: ./.github/actions/setup-workspace
-        with:
-          token: ${{ secrets.CROSS_REPO_TOKEN }}
+      - name: Authenticate private registry
+        run: |
+          echo "@vayva-tech:registry=https://npm.pkg.github.com/" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.CROSS_REPO_TOKEN }}" >> .npmrc
+          git config --global url."https://x-access-token:${{ secrets.CROSS_REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install & build shared
         run: |
@@ -93,10 +94,11 @@ jobs:
           corepack prepare pnpm@11.25.0 --activate
           pnpm --version
 
-      - name: Setup workspace
-        uses: ./.github/actions/setup-workspace
-        with:
-          token: ${{ secrets.CROSS_REPO_TOKEN }}
+      - name: Authenticate private registry
+        run: |
+          echo "@vayva-tech:registry=https://npm.pkg.github.com/" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.CROSS_REPO_TOKEN }}" >> .npmrc
+          git config --global url."https://x-access-token:${{ secrets.CROSS_REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install & build shared
         run: |
