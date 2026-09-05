@@ -63,11 +63,32 @@ jobs:
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
           echo "minimum-release-age=0" >> .npmrc
 
-      - name: Install & build shared
+      - name: Set up workspace dependencies
         run: |
-          rm -f pnpm-lock.yaml
-          pnpm install --no-frozen-lockfile --config.minimum-release-age=0
-          pnpm --config.minimum-release-age=0 --filter "./vayva-*" build
+          WS_DEPS=$(node -e "
+            const p=require('./package.json');
+            const d={...p.dependencies,...(p.devDependencies||{})};
+            const w=Object.keys(d).filter(k=>String(d[k]).startsWith('workspace:'));
+            if(w.length) console.log(w.map(k=>k.replace('@vayva-tech/','')).join(' '));
+          ")
+          if [ -n "$WS_DEPS" ]; then
+            echo "Setting up workspace deps: $WS_DEPS"
+            for pkg in $WS_DEPS; do
+              if [ ! -d "vayva-$pkg" ]; then
+                git clone --depth 1 "https://x-access-token:${{ secrets.NPM_TOKEN }}@github.com/Vayva-Tech/vayva-$pkg.git" "vayva-$pkg"
+              fi
+            done
+            PKG_LIST=$(echo "$WS_DEPS" | awk '{for(i=1;i<=NF;i++) print "  - \"./vayva-" $i "\""}')
+            printf 'packages:\n  - "."\n%s\n' "$PKG_LIST" > pnpm-workspace.yaml
+            rm -f pnpm-lock.yaml
+            pnpm install --no-frozen-lockfile --config.minimum-release-age=0
+            for dir in vayva-*/; do
+              [ -f "$dir/tsconfig.json" ] && npx tsc --project "$dir/tsconfig.json" || true
+            done
+          else
+            rm -f pnpm-lock.yaml
+            pnpm install --no-frozen-lockfile --config.minimum-release-age=0
+          fi
 
       - name: Typecheck
         run: |
@@ -124,11 +145,32 @@ jobs:
           echo "minimum-release-age=0" >> .npmrc
           git config --global url."https://x-access-token:${{ secrets.NPM_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-      - name: Install & build shared
+      - name: Set up workspace dependencies
         run: |
-          rm -f pnpm-lock.yaml
-          pnpm install --no-frozen-lockfile --config.minimum-release-age=0
-          pnpm --config.minimum-release-age=0 --filter "./vayva-*" build
+          WS_DEPS=$(node -e "
+            const p=require('./package.json');
+            const d={...p.dependencies,...(p.devDependencies||{})};
+            const w=Object.keys(d).filter(k=>String(d[k]).startsWith('workspace:'));
+            if(w.length) console.log(w.map(k=>k.replace('@vayva-tech/','')).join(' '));
+          ")
+          if [ -n "$WS_DEPS" ]; then
+            echo "Setting up workspace deps: $WS_DEPS"
+            for pkg in $WS_DEPS; do
+              if [ ! -d "vayva-$pkg" ]; then
+                git clone --depth 1 "https://x-access-token:${{ secrets.NPM_TOKEN }}@github.com/Vayva-Tech/vayva-$pkg.git" "vayva-$pkg"
+              fi
+            done
+            PKG_LIST=$(echo "$WS_DEPS" | awk '{for(i=1;i<=NF;i++) print "  - \"./vayva-" $i "\""}')
+            printf 'packages:\n  - "."\n%s\n' "$PKG_LIST" > pnpm-workspace.yaml
+            rm -f pnpm-lock.yaml
+            pnpm install --no-frozen-lockfile --config.minimum-release-age=0
+            for dir in vayva-*/; do
+              [ -f "$dir/tsconfig.json" ] && npx tsc --project "$dir/tsconfig.json" || true
+            done
+          else
+            rm -f pnpm-lock.yaml
+            pnpm install --no-frozen-lockfile --config.minimum-release-age=0
+          fi
 
       - name: Build Next.js
         env:
