@@ -70,6 +70,10 @@ jobs:
       - name: Install
         run: pnpm install --no-frozen-lockfile --config.minimum-release-age=0 --trust-lockfile
 
+      - name: Generate Prisma client
+        if: hashFiles('prisma/schema.prisma') != ''
+        run: npx prisma generate
+
       - name: Lint
         run: |
           if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['lint'] ? 0 : 1)"; then
