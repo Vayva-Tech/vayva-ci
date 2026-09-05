@@ -190,6 +190,7 @@ jobs:
         run: |
           install -m 700 -d ~/.ssh
           printf '%s
+'
 ' "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/vayva_prod
           chmod 600 ~/.ssh/vayva_prod
           ssh-keyscan -H "${{ secrets.PROD_SSH_HOST }}" >> ~/.ssh/known_hosts
