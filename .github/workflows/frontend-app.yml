@@ -78,7 +78,23 @@ jobs:
             echo "Setting up workspace deps: $WS_DEPS"
             for pkg in $WS_DEPS; do
               if [ ! -d "vayva-$pkg" ]; then
-                curl -sL -H "Authorization: token ${GIT_TOKEN}" "https://api.github.com/repos/Vayva-Tech/vayva-$pkg/tarball/main" | tar xz
+                echo "Downloading vayva-$pkg..."
+                TMPFILE=$(mktemp)
+                HTTP_CODE=$(curl -sL -w "%{http_code}" -H "Authorization: token ${GIT_TOKEN}" "https://api.github.com/repos/Vayva-Tech/vayva-$pkg/tarball/main" -o "$TMPFILE")
+                if [ "$HTTP_CODE" != "200" ]; then
+                  echo "ERROR: HTTP $HTTP_CODE downloading vayva-$pkg"
+                  cat "$TMPFILE"
+                  rm -f "$TMPFILE"
+                  exit 1
+                fi
+                if ! file "$TMPFILE" | grep -q gzip; then
+                  echo "ERROR: Response is not gzip for vayva-$pkg"
+                  head -c 500 "$TMPFILE"
+                  rm -f "$TMPFILE"
+                  exit 1
+                fi
+                tar xzf "$TMPFILE"
+                rm -f "$TMPFILE"
                 mv Vayva-Tech-vayva-$pkg-* "vayva-$pkg" 2>/dev/null || true
               fi
             done
@@ -162,7 +178,23 @@ jobs:
             echo "Setting up workspace deps: $WS_DEPS"
             for pkg in $WS_DEPS; do
               if [ ! -d "vayva-$pkg" ]; then
-                curl -sL -H "Authorization: token ${GIT_TOKEN}" "https://api.github.com/repos/Vayva-Tech/vayva-$pkg/tarball/main" | tar xz
+                echo "Downloading vayva-$pkg..."
+                TMPFILE=$(mktemp)
+                HTTP_CODE=$(curl -sL -w "%{http_code}" -H "Authorization: token ${GIT_TOKEN}" "https://api.github.com/repos/Vayva-Tech/vayva-$pkg/tarball/main" -o "$TMPFILE")
+                if [ "$HTTP_CODE" != "200" ]; then
+                  echo "ERROR: HTTP $HTTP_CODE downloading vayva-$pkg"
+                  cat "$TMPFILE"
+                  rm -f "$TMPFILE"
+                  exit 1
+                fi
+                if ! file "$TMPFILE" | grep -q gzip; then
+                  echo "ERROR: Response is not gzip for vayva-$pkg"
+                  head -c 500 "$TMPFILE"
+                  rm -f "$TMPFILE"
+                  exit 1
+                fi
+                tar xzf "$TMPFILE"
+                rm -f "$TMPFILE"
                 mv Vayva-Tech-vayva-$pkg-* "vayva-$pkg" 2>/dev/null || true
               fi
             done
@@ -211,7 +243,23 @@ jobs:
             vayva-semantic-layer vayva-ui
           )
           for pkg in "${PACKAGES[@]}"; do
-            curl -sL -H "Authorization: token ${GIT_TOKEN}" "https://api.github.com/repos/Vayva-Tech/$pkg/tarball/main" | tar xz -C "$CTX"
+            echo "Downloading $pkg for Docker context..."
+            TMPFILE=$(mktemp)
+            HTTP_CODE=$(curl -sL -w "%{http_code}" -H "Authorization: token ${GIT_TOKEN}" "https://api.github.com/repos/Vayva-Tech/$pkg/tarball/main" -o "$TMPFILE")
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "ERROR: HTTP $HTTP_CODE downloading $pkg"
+              cat "$TMPFILE"
+              rm -f "$TMPFILE"
+              exit 1
+            fi
+            if ! file "$TMPFILE" | grep -q gzip; then
+              echo "ERROR: Response is not gzip for $pkg"
+              head -c 500 "$TMPFILE"
+              rm -f "$TMPFILE"
+              exit 1
+            fi
+            tar xzf "$TMPFILE" -C "$CTX"
+            rm -f "$TMPFILE"
             mv "$CTX"/Vayva-Tech-$pkg-* "$CTX/$pkg" 2>/dev/null || true
           done
 
