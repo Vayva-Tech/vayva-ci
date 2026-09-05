@@ -110,18 +110,15 @@ jobs:
 
       - name: Docker build
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           SERVICE: ${{ inputs.service-name }}
           SHA: ${{ github.sha }}
         run: |
-          printf '%s' "$NPM_TOKEN" > $GITHUB_WORKSPACE/.npm-token
           docker build \
-            --secret id=vayva_npm_token,src=$GITHUB_WORKSPACE/.npm-token \
+            --build-arg NPM_TOKEN="${{ secrets.NPM_TOKEN }}" \
             -t "ghcr.io/vayva-tech/${SERVICE}:${IMAGE_TAG}" \
             -t "ghcr.io/vayva-tech/${SERVICE}:sha-latest" \
             -t "vayva-ci/${SERVICE}:${SHA}" \
             .
-          rm -f $GITHUB_WORKSPACE/.npm-token
 
       - name: Container smoke test
         env:
