@@ -110,7 +110,7 @@ jobs:
 
       - name: Docker build
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ github.token }}
           SERVICE: ${{ inputs.service-name }}
           SHA: ${{ github.sha }}
         run: |
