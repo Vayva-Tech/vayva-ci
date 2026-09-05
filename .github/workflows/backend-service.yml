@@ -175,6 +175,7 @@ jobs:
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
             echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            docker tag "ghcr.io/vayva-tech/${SERVICE}:${IMAGE_TAG}" "ghcr.io/vayva-tech/${SERVICE}:sha-latest"
             docker push "ghcr.io/vayva-tech/${SERVICE}:${IMAGE_TAG}"
             docker push "ghcr.io/vayva-tech/${SERVICE}:sha-latest"
             echo "Pushed ghcr.io/vayva-tech/${SERVICE}:${IMAGE_TAG}"
@@ -188,7 +189,8 @@ jobs:
           SERVICE: ${{ inputs.service-name }}
         run: |
           install -m 700 -d ~/.ssh
-          printf '%s\n' "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/vayva_prod
+          printf '%s
+' "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/vayva_prod
           chmod 600 ~/.ssh/vayva_prod
           ssh-keyscan -H "${{ secrets.PROD_SSH_HOST }}" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/vayva_prod "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" \
