@@ -43,6 +43,14 @@ jobs:
           echo "@vayva-tech:registry=https://npm.pkg.github.com/" >> .npmrc
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
           echo "minimum-release-age=0" >> .npmrc
+          echo "onlyBuiltDependencies[]=esbuild" >> .npmrc
+          echo "onlyBuiltDependencies[]=workerd" >> .npmrc
+          echo "onlyBuiltDependencies[]=@swc/core" >> .npmrc
+          echo "onlyBuiltDependencies[]=@sentry/cli" >> .npmrc
+          echo "onlyBuiltDependencies[]=@parcel/watcher" >> .npmrc
+          echo "onlyBuiltDependencies[]=protobufjs" >> .npmrc
+          echo "onlyBuiltDependencies[]=core-js-pure" >> .npmrc
+          echo "onlyBuiltDependencies[]=unrs-resolver" >> .npmrc
 
       - name: Install
         run: pnpm install --no-frozen-lockfile --config.minimum-release-age=0 --trust-lockfile
