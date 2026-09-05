@@ -151,6 +151,10 @@ jobs:
             -e JWT_PUBLIC_KEY="$JWT_PUB" \
             -e JWT_PRIVATE_KEY="$JWT_PRIV" \
             -e EVENT_SIGNING_SECRET="ci-test-signing-secret-do-not-use-in-prod" \
+            -e FINANCE_WEBHOOK_SECRET="ci-smoke-test-dummy" \
+            -e MERCHANT_WEBHOOK_SECRET="ci-smoke-test-dummy" \
+            -e IDENTITY_WEBHOOK_SECRET="ci-smoke-test-dummy" \
+            -e WALLET_WEBHOOK_SECRET="ci-smoke-test-dummy" \
             $EXTRA_FLAGS \
             --name "vayva-smoke-${SERVICE}" \
             "vayva-ci/${SERVICE}:${SHA}")
