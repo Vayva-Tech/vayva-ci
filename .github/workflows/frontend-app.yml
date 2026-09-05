@@ -237,7 +237,7 @@ jobs:
           CTX="/tmp/docker-context"
           rm -rf "$CTX"
           mkdir -p "$CTX/$APP"
-          cp -a "$GITHUB_WORKSPACE/." "$CTX/$APP/"
+          rsync -a --no-hard-links "$GITHUB_WORKSPACE/" "$CTX/$APP/"
           echo "Context prep complete. Contents of $CTX:"
           ls -la "$CTX"
           echo "Contents of $CTX/$APP:"
