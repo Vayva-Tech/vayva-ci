@@ -23,7 +23,7 @@ on:
         default: false
     secrets:
       NPM_TOKEN:
-        required: true
+        required: false
       PROD_SSH_KEY:
         required: false
       PROD_SSH_HOST:
@@ -64,7 +64,7 @@ jobs:
       - name: Authenticate private registry
         run: |
           echo "@vayva-tech:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
           echo "minimum-release-age=0" >> .npmrc
 
       - name: Install
@@ -112,9 +112,10 @@ jobs:
         env:
           SERVICE: ${{ inputs.service-name }}
           SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           docker build \
-            --build-arg NPM_TOKEN="${{ secrets.NPM_TOKEN }}" \
+            --secret id=vayva_npm_token,env=GITHUB_TOKEN \
             -t "ghcr.io/vayva-tech/${SERVICE}:${IMAGE_TAG}" \
             -t "ghcr.io/vayva-tech/${SERVICE}:sha-latest" \
             -t "vayva-ci/${SERVICE}:${SHA}" \
