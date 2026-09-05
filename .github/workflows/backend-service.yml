@@ -155,6 +155,7 @@ jobs:
             -e MERCHANT_WEBHOOK_SECRET="ci-smoke-test-dummy" \
             -e IDENTITY_WEBHOOK_SECRET="ci-smoke-test-dummy" \
             -e WALLET_WEBHOOK_SECRET="ci-smoke-test-dummy" \
+            -e PAYSTACK_SECRET_KEY="ci-smoke-test-dummy" \
             $EXTRA_FLAGS \
             --name "vayva-smoke-${SERVICE}" \
             "vayva-ci/${SERVICE}:${SHA}")
