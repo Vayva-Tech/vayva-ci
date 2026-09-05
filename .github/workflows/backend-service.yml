@@ -163,6 +163,9 @@ jobs:
             -e VAPID_PUBLIC_KEY="ci-smoke-test-dummy" \
             -e VAPID_PRIVATE_KEY="ci-smoke-test-dummy" \
             -e VAPID_SUBJECT="ci-smoke-test-dummy" \
+            -e INTERNAL_API_KEY="ci-smoke-test-dummy" \
+            -e MEILISEARCH_MASTER_KEY="ci-smoke-test-dummy" \
+            -e SERVICE_SECRET="ci-smoke-test-dummy" \
             $EXTRA_FLAGS \
             --name "vayva-smoke-${SERVICE}" \
             "vayva-ci/${SERVICE}:${SHA}")
