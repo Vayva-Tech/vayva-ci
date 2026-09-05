@@ -237,9 +237,11 @@ jobs:
           CTX="/tmp/docker-context"
           rm -rf "$CTX"
           mkdir -p "$CTX/$APP"
-          for item in $(ls -A "$GITHUB_WORKSPACE"); do
-            mv "$GITHUB_WORKSPACE/$item" "$CTX/$APP/"
-          done
+          cp -a "$GITHUB_WORKSPACE/." "$CTX/$APP/"
+          echo "Context prep complete. Contents of $CTX:"
+          ls -la "$CTX"
+          echo "Contents of $CTX/$APP:"
+          ls "$CTX/$APP" | head -20
           PACKAGES=(
             vayva-shared vayva-schemas vayva-middleware vayva-auth-middleware
             vayva-redis vayva-event-bus vayva-email vayva-compliance
@@ -251,6 +253,11 @@ jobs:
             rm -rf "$CTX/$pkg"
             git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/Vayva-Tech/$pkg.git" "$CTX/$pkg"
           done
+          echo "Final context contents:"
+          ls -la "$CTX"
+          test -d "$CTX/$APP" || { echo "ERROR: $CTX/$APP does not exist"; exit 1; }
+          test -f "$CTX/$APP/Dockerfile" || { echo "ERROR: $CTX/$APP/Dockerfile not found"; exit 1; }
+          echo "Docker build context verified"
 
       - name: Docker build
         env:
@@ -258,6 +265,8 @@ jobs:
           SHA: ${{ github.sha }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          echo "Pre-build check: /tmp/docker-context/${APP} exists?"
+          ls -la "/tmp/docker-context/${APP}" | head -5
           docker build \
             --build-arg NODE_AUTH_TOKEN="$NPM_TOKEN" \
             -t "ghcr.io/vayva-tech/${APP}:${IMAGE_TAG}" \
