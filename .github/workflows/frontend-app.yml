@@ -20,6 +20,10 @@ on:
     secrets:
       NPM_TOKEN:
         required: true
+      VAYVA_CI_APP_ID:
+        required: true
+      VAYVA_CI_PRIVATE_KEY:
+        required: true
       PROD_SSH_KEY:
         required: false
       PROD_SSH_HOST:
@@ -57,6 +61,14 @@ jobs:
           corepack prepare pnpm@11.25.0 --activate
           pnpm --version
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.VAYVA_CI_APP_ID }}
+          private-key: ${{ secrets.VAYVA_CI_PRIVATE_KEY }}
+          owner: Vayva-Tech
+
       - name: Authenticate private registry
         run: |
           echo "@vayva-tech:registry=https://npm.pkg.github.com/" >> .npmrc
@@ -65,7 +77,7 @@ jobs:
 
       - name: Set up workspace dependencies
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           WS_DEPS=$(node -e "
             const p=require('./package.json');
@@ -141,6 +153,14 @@ jobs:
           corepack prepare pnpm@11.25.0 --activate
           pnpm --version
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.VAYVA_CI_APP_ID }}
+          private-key: ${{ secrets.VAYVA_CI_PRIVATE_KEY }}
+          owner: Vayva-Tech
+
       - name: Authenticate private registry
         run: |
           echo "@vayva-tech:registry=https://npm.pkg.github.com/" >> .npmrc
@@ -149,7 +169,7 @@ jobs:
 
       - name: Set up workspace dependencies
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           WS_DEPS=$(node -e "
             const p=require('./package.json');
@@ -195,7 +215,7 @@ jobs:
       - name: Prepare Docker build context
         env:
           APP: ${{ inputs.app-name }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -e
           CTX="/tmp/docker-context"
