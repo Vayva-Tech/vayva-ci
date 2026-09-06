@@ -253,6 +253,19 @@ jobs:
             rm -rf "$CTX/$pkg"
             git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/Vayva-Tech/$pkg.git" "$CTX/$pkg"
           done
+          echo "Verifying cloned packages..."
+          for pkg in "${PACKAGES[@]}"; do
+            if [ -f "$CTX/$pkg/package.json" ]; then
+              SIZE=$(stat -c%s "$CTX/$pkg/package.json" 2>/dev/null || stat -f%z "$CTX/$pkg/package.json" 2>/dev/null || echo "unknown")
+              echo "  $pkg/package.json: $SIZE bytes"
+              if [ "$SIZE" = "0" ]; then
+                echo "  ERROR: $pkg/package.json is empty!"
+                exit 1
+              fi
+            else
+              echo "  WARNING: $pkg/package.json not found"
+            fi
+          done
           echo "Final context contents:"
           ls -la "$CTX"
           test -d "$CTX/$APP" || { echo "ERROR: $CTX/$APP does not exist"; exit 1; }
