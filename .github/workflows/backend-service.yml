@@ -236,7 +236,7 @@ jobs:
     name: Deploy
     needs: build-and-push
     if: inputs.deploy && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, deploy]
+    runs-on: [self-hosted]
     environment: production
     steps:
       - name: Deploy to production
