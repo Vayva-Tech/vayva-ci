@@ -104,13 +104,13 @@ jobs:
             PKG_LIST=$(echo "$WS_DEPS" | awk '{for(i=1;i<=NF;i++) print "  - \"./vayva-" $i "\""}')
             printf 'packages:\n  - "."\n%s\n' "$PKG_LIST" > pnpm-workspace.yaml
             rm -f pnpm-lock.yaml
-            pnpm install --no-frozen-lockfile --config.minimum-release-age=0 --config.dangerously-allow-all-builds=true --config.ignore-supply-chain-policy=true
+            pnpm install --prefer-offline --no-frozen-lockfile --config.minimum-release-age=0 --config.dangerously-allow-all-builds=true --config.ignore-supply-chain-policy=true
             for dir in vayva-*/; do
               [ -f "$dir/tsconfig.json" ] && npx tsc --project "$dir/tsconfig.json" || true
             done
           else
             rm -f pnpm-lock.yaml
-            pnpm install --no-frozen-lockfile --config.minimum-release-age=0 --config.dangerously-allow-all-builds=true --config.ignore-supply-chain-policy=true
+            pnpm install --prefer-offline --no-frozen-lockfile --config.minimum-release-age=0 --config.dangerously-allow-all-builds=true --config.ignore-supply-chain-policy=true
           fi
 
       - name: Typecheck
@@ -204,14 +204,20 @@ jobs:
             PKG_LIST=$(echo "$WS_DEPS" | awk '{for(i=1;i<=NF;i++) print "  - \"./vayva-" $i "\""}')
             printf 'packages:\n  - "."\n%s\n' "$PKG_LIST" > pnpm-workspace.yaml
             rm -f pnpm-lock.yaml
-            pnpm install --no-frozen-lockfile --config.minimum-release-age=0 --config.dangerously-allow-all-builds=true --config.ignore-supply-chain-policy=true
+            pnpm install --prefer-offline --no-frozen-lockfile --config.minimum-release-age=0 --config.dangerously-allow-all-builds=true --config.ignore-supply-chain-policy=true
             for dir in vayva-*/; do
               [ -f "$dir/tsconfig.json" ] && npx tsc --project "$dir/tsconfig.json" || true
             done
           else
             rm -f pnpm-lock.yaml
-            pnpm install --no-frozen-lockfile --config.minimum-release-age=0 --config.dangerously-allow-all-builds=true --config.ignore-supply-chain-policy=true
+            pnpm install --prefer-offline --no-frozen-lockfile --config.minimum-release-age=0 --config.dangerously-allow-all-builds=true --config.ignore-supply-chain-policy=true
           fi
+
+      - name: Setup Next.js persistent cache
+        run: |
+          mkdir -p ~/nextjs-cache/"${{ inputs.app-name }}"
+          mkdir -p .next
+          ln -sfn ~/nextjs-cache/"${{ inputs.app-name }}" .next/cache
 
       - name: Build Next.js
         env:

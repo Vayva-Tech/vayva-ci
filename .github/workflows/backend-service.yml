@@ -76,7 +76,7 @@ jobs:
           echo "onlyBuiltDependencies[]=unrs-resolver" >> .npmrc
 
       - name: Install
-        run: pnpm install --no-frozen-lockfile --config.minimum-release-age=0 --trust-lockfile
+        run: pnpm install --prefer-offline --no-frozen-lockfile --config.minimum-release-age=0 --trust-lockfile
 
       - name: Generate Prisma client
         if: hashFiles('prisma/schema.prisma') != ''
