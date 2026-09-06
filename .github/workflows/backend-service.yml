@@ -39,8 +39,8 @@ env:
   IMAGE_TAG: sha-${{ github.sha }}
 
 jobs:
-  ci:
-    name: CI
+  validate:
+    name: Validate
     runs-on: self-hosted
     env:
       PNPM_MINIMUM_RELEASE_AGE: "0"
@@ -113,6 +113,18 @@ jobs:
           else
             echo "No build script; skipping"
           fi
+
+  build-and-push:
+    name: Build & Push
+    needs: validate
+    runs-on: self-hosted
+    env:
+      PNPM_MINIMUM_RELEASE_AGE: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Runner disk guard
         run: |
@@ -212,8 +224,22 @@ jobs:
             echo "Skipping registry push (not main push)"
           fi
 
+      - name: Docker cleanup
+        if: always()
+        env:
+          SERVICE: ${{ inputs.service-name }}
+          SHA: ${{ github.sha }}
+        run: |
+          docker rmi "vayva-ci/${SERVICE}:${SHA}" "ghcr.io/vayva-tech/${SERVICE}:${IMAGE_TAG}" "ghcr.io/vayva-tech/${SERVICE}:sha-latest" 2>/dev/null || true
+
+  deploy:
+    name: Deploy
+    needs: build-and-push
+    if: inputs.deploy && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, deploy]
+    environment: production
+    steps:
       - name: Deploy to production
-        if: inputs.deploy && github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           SERVICE: ${{ inputs.service-name }}
         run: |
@@ -224,11 +250,6 @@ jobs:
           ssh -i ~/.ssh/vayva_prod "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" \
             "/opt/vayva/scripts/deploy-service.sh '${SERVICE}' '${IMAGE_TAG}'"
 
-      - name: Docker cleanup
+      - name: Cleanup SSH key
         if: always()
-        env:
-          SERVICE: ${{ inputs.service-name }}
-          SHA: ${{ github.sha }}
-        run: |
-          docker rmi "vayva-ci/${SERVICE}:${SHA}" "ghcr.io/vayva-tech/${SERVICE}:${IMAGE_TAG}" "ghcr.io/vayva-tech/${SERVICE}:sha-latest" 2>/dev/null || true
-          rm -f ~/.ssh/vayva_prod
+        run: rm -f ~/.ssh/vayva_prod
