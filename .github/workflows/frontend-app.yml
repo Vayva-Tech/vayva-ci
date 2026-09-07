@@ -238,9 +238,9 @@ jobs:
         env:
           APP: ${{ inputs.app-name }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          CTX: /tmp/docker-context-${{ github.run_id }}-${{ strategy.job-index }}
         run: |
           set -e
-          CTX="/tmp/docker-context"
           rm -rf "$CTX"
           mkdir -p "$CTX/$APP"
           rsync -a --no-hard-links \
@@ -291,16 +291,17 @@ jobs:
           APP: ${{ inputs.app-name }}
           SHA: ${{ github.sha }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          CTX: /tmp/docker-context-${{ github.run_id }}-${{ strategy.job-index }}
         run: |
-          echo "Pre-build check: /tmp/docker-context/${APP} exists?"
-          ls -la "/tmp/docker-context/${APP}" | head -5
+          echo "Pre-build check: ${CTX}/${APP} exists?"
+          ls -la "${CTX}/${APP}" | head -5
           docker build \
             --build-arg NODE_AUTH_TOKEN="$NPM_TOKEN" \
             -t "ghcr.io/vayva-tech/${APP}:${IMAGE_TAG}" \
             -t "ghcr.io/vayva-tech/${APP}:sha-latest" \
             -t "vayva-ci/${APP}:${SHA}" \
-            -f "/tmp/docker-context/${APP}/Dockerfile" \
-            /tmp/docker-context
+            -f "${CTX}/${APP}/Dockerfile" \
+            "$CTX"
 
       - name: Push to GHCR (main only)
         env:
@@ -321,9 +322,10 @@ jobs:
         env:
           APP: ${{ inputs.app-name }}
           SHA: ${{ github.sha }}
+          CTX: /tmp/docker-context-${{ github.run_id }}-${{ strategy.job-index }}
         run: |
           docker rmi "vayva-ci/${APP}:${SHA}" "ghcr.io/vayva-tech/${APP}:${IMAGE_TAG}" "ghcr.io/vayva-tech/${APP}:sha-latest" 2>/dev/null || true
-          rm -rf /tmp/docker-context
+          rm -rf "$CTX"
 
   deploy:
     name: Deploy
