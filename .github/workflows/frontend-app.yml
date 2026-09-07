@@ -243,7 +243,15 @@ jobs:
           CTX="/tmp/docker-context"
           rm -rf "$CTX"
           mkdir -p "$CTX/$APP"
-          rsync -a --no-hard-links "$GITHUB_WORKSPACE/" "$CTX/$APP/"
+          rsync -a --no-hard-links \
+            --exclude='node_modules' \
+            --exclude='.git' \
+            --exclude='.next' \
+            --exclude='coverage' \
+            --exclude='.env.local' \
+            --exclude='.env.*.local' \
+            "$GITHUB_WORKSPACE/" "$CTX/$APP/"
+          printf 'node_modules\n**/node_modules\n.git\n.next\ncoverage\n.env.local\n.env.*.local\n' > "$CTX/.dockerignore"
           echo "Context prep complete. Contents of $CTX:"
           ls -la "$CTX"
           echo "Contents of $CTX/$APP:"
