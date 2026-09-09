@@ -12,6 +12,10 @@ on:
       NPM_TOKEN:
         required: false
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -19,6 +23,7 @@ jobs:
   ci:
     name: CI
     runs-on: self-hosted
+    timeout-minutes: 15
     env:
       PNPM_MINIMUM_RELEASE_AGE: "0"
     steps:
@@ -54,7 +59,7 @@ jobs:
           echo "onlyBuiltDependencies[]=unrs-resolver" >> .npmrc
 
       - name: Install
-        run: pnpm install --no-frozen-lockfile --config.minimum-release-age=0 --trust-lockfile
+        run: pnpm install --frozen-lockfile --config.minimum-release-age=0
 
       - name: Lint
         run: |

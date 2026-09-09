@@ -14,7 +14,7 @@ on:
 
 jobs:
   ci:
-    uses: Vayva-Tech/vayva-ci/.github/workflows/frontend-app.yml@main
+    uses: Vayva-Tech/vayva-ci/.github/workflows/frontend-app.yml@v1
     with:
       app-name: APP_NAME              # e.g. vayva-merchant
       # build-env: |                  # uncomment and add build-time env vars

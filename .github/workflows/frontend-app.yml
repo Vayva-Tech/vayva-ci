@@ -31,6 +31,10 @@ on:
       PROD_SSH_USER:
         required: false
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
@@ -42,6 +46,7 @@ jobs:
   quality:
     name: Quality (typecheck + lint + test)
     runs-on: self-hosted
+    timeout-minutes: 20
     env:
       PNPM_MINIMUM_RELEASE_AGE: "0"
     steps:
@@ -136,12 +141,12 @@ jobs:
           else
             echo "No test script; skipping"
           fi
-        continue-on-error: true
 
   build-and-push:
     name: Build & Push
     runs-on: self-hosted
     needs: [quality]
+    timeout-minutes: 25
     env:
       PNPM_MINIMUM_RELEASE_AGE: "0"
     steps:
@@ -296,7 +301,7 @@ jobs:
           echo "Pre-build check: ${CTX}/${APP} exists?"
           ls -la "${CTX}/${APP}" | head -5
           docker build \
-            --build-arg NODE_AUTH_TOKEN="$NPM_TOKEN" \
+            --secret id=vayva_npm_token,env=NPM_TOKEN \
             -t "ghcr.io/vayva-tech/${APP}:${IMAGE_TAG}" \
             -t "ghcr.io/vayva-tech/${APP}:sha-latest" \
             -t "vayva-ci/${APP}:${SHA}" \

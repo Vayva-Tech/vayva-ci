@@ -14,7 +14,7 @@ on:
 
 jobs:
   ci:
-    uses: Vayva-Tech/vayva-ci/.github/workflows/backend-service.yml@main
+    uses: Vayva-Tech/vayva-ci/.github/workflows/backend-service.yml@v1
     with:
       service-name: SERVICE_NAME        # e.g. identity-service
       service-port: 4000                # e.g. 4010 for identity-service

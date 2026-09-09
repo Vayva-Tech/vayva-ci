@@ -12,7 +12,7 @@ on:
 
 jobs:
   ci:
-    uses: Vayva-Tech/vayva-ci/.github/workflows/library-package.yml@main
+    uses: Vayva-Tech/vayva-ci/.github/workflows/library-package.yml@v1
     with:
       # package-name: vayva-shared    # only if repo name != package name
     secrets: inherit
