@@ -16,20 +16,9 @@ on:
         required: false
         default: ''
         type: string
-      deploy:
-        description: Deploy to production after successful push
-        required: false
-        type: boolean
-        default: false
     secrets:
       NPM_TOKEN:
         required: true
-      PROD_SSH_KEY:
-        required: false
-      PROD_SSH_HOST:
-        required: false
-      PROD_SSH_USER:
-        required: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -118,6 +107,10 @@ jobs:
           else
             echo "No build script; skipping"
           fi
+
+      - name: Cleanup
+        if: always()
+        run: rm -f .npmrc
 
   build-and-push:
     name: Build & Push
@@ -230,6 +223,41 @@ jobs:
             echo "Skipping registry push (not main push)"
           fi
 
+      - name: Capture image digest
+        id: digest
+        env:
+          SERVICE: ${{ inputs.service-name }}
+        run: |
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "ghcr.io/vayva-tech/${SERVICE}:${IMAGE_TAG}" 2>/dev/null || echo "none")
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Image digest: $DIGEST"
+
+      - name: Record deployment manifest
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          SERVICE: ${{ inputs.service-name }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: |
+          mkdir -p deploy-manifests
+          cat > "deploy-manifests/${SERVICE}.yaml" <<EOF
+          service: ${SERVICE}
+          commit: ${{ github.sha }}
+          image: ghcr.io/vayva-tech/${SERVICE}:${IMAGE_TAG}
+          digest: ${DIGEST}
+          built_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          built_by: ${{ github.actor }}
+          EOF
+          echo "Manifest recorded:"
+          cat "deploy-manifests/${SERVICE}.yaml"
+
+      - name: Upload deployment manifest
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-manifest-${{ inputs.service-name }}
+          path: deploy-manifests/
+          retention-days: 90
+
       - name: Docker cleanup
         if: always()
         env:
@@ -237,25 +265,3 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           docker rmi "vayva-ci/${SERVICE}:${SHA}" "ghcr.io/vayva-tech/${SERVICE}:${IMAGE_TAG}" "ghcr.io/vayva-tech/${SERVICE}:sha-latest" 2>/dev/null || true
-
-  deploy:
-    name: Deploy
-    needs: build-and-push
-    if: inputs.deploy && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted]
-    environment: production
-    steps:
-      - name: Deploy to production
-        env:
-          SERVICE: ${{ inputs.service-name }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/vayva_prod
-          chmod 600 ~/.ssh/vayva_prod
-          ssh-keyscan -H "${{ secrets.PROD_SSH_HOST }}" >> ~/.ssh/known_hosts
-          ssh -i ~/.ssh/vayva_prod "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" \
-            "/opt/vayva/scripts/deploy-service.sh '${SERVICE}' '${IMAGE_TAG}'"
-
-      - name: Cleanup SSH key
-        if: always()
-        run: rm -f ~/.ssh/vayva_prod

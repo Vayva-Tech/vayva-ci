@@ -1,0 +1,217 @@
+name: Vayva Production Deployment
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        description: Service name (e.g. identity-service)
+        required: true
+        type: string
+      release_sha:
+        description: Git SHA to deploy (40-character commit hash)
+        required: true
+        type: string
+      change_reference:
+        description: Optional change reference for audit trail
+        required: false
+        type: string
+        default: ''
+    secrets:
+      PROD_SSH_KEY:
+        required: true
+      PROD_SSH_HOST:
+        required: true
+      PROD_SSH_USER:
+        required: true
+
+concurrency:
+  group: production-${{ inputs.service-name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PROD_SSH_KNOWN_HOSTS: |
+    169.58.197.166 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHSOnPRo9XffQN/8rN4Ym4X3ZK6gLq4Zuph4ANxF9/ex
+    169.58.197.166 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC9eRZRRNWuzHwxX6iJ2cAhn+Xvs7V2uhrsLs016OHtbsLuUQGdUz/6/cKchiqW7sHB1+4AmRM26RhEtUZECzDx4dBe1MA55CtdXJbzZsacC8k4PIkW8f1dryJhNGBE05MOO/Ost6Q7ZLwzgARBE8cIjE1qpuHT3LQ2KPbglDIKYCxK8AbCmaZ3MjoHLcgr+e5VUUewW6zM7F+bvOYiZQ7Q3T3/qvuJtCS45I7XAyxvpAa+zp/5Q3K2y9W1ke+CTBeUc1H7krAnYrbnw936tFf5cVr9nMrEnU6i4U/7uYCtUxl1VcBxaQrN0kdfuC9pk/ua1tnpqH1m6zbzUj9pwLmjs9IhZT6NTt/Pu20RCTflHcQ77eZ/0Fjs53lAnMpzGyI7WnfwquzokLT6XToyFwqNGfwSz/ZE1QVcXJwfSNWX/EfAwgR6ftJQH0G7boDlM5NbMidAL7fbozPxvJyKJrhgsfC26BOskPqQnx5/UDLvZmK+zV7eipr8gHu94LWeSdk=
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.resolve.outputs.image_tag }}
+      image_digest: ${{ steps.resolve.outputs.image_digest }}
+    steps:
+      - name: Validate SHA format
+        run: |
+          SHA="${{ inputs.release_sha }}"
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: release_sha must be exactly 40 hexadecimal characters"
+            echo "Provided: $SHA"
+            exit 1
+          fi
+          echo "SHA format: OK"
+
+      - name: Reject mutable tags
+        run: |
+          SHA="${{ inputs.release_sha }}"
+          IMAGE_TAG="sha-${SHA}"
+          
+          if [[ "$IMAGE_TAG" == *"latest"* ]] || [[ "$IMAGE_TAG" == *"main"* ]] || [[ "$IMAGE_TAG" == *"master"* ]]; then
+            echo "ERROR: Production deployment must use immutable SHA tag"
+            echo "Rejected tag: ${IMAGE_TAG}"
+            exit 1
+          fi
+          echo "Tag immutability: OK"
+
+      - name: Verify SHA exists in repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA="${{ inputs.release_sha }}"
+          REPO="${{ github.repository }}"
+          
+          if ! gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null; then
+            echo "ERROR: SHA $SHA does not exist in repository $REPO"
+            exit 1
+          fi
+          echo "SHA exists in repository: OK"
+
+      - name: Verify GHCR image exists
+        id: resolve
+        env:
+          SERVICE: ${{ inputs.service-name }}
+          SHA: ${{ inputs.release_sha }}
+        run: |
+          IMAGE_TAG="sha-${SHA}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${SERVICE}:${IMAGE_TAG}"
+          
+          echo "Checking for image: ${IMAGE}"
+          
+          # Authenticate to GHCR
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          
+          # Pull manifest to verify existence and get digest
+          if ! docker manifest inspect "${IMAGE}" > /tmp/manifest.json 2>/dev/null; then
+            echo "ERROR: Image ${IMAGE} does not exist in GHCR"
+            echo "This SHA may not have been built by CI yet."
+            exit 1
+          fi
+          
+          # Extract digest
+          DIGEST=$(jq -r '.config.digest' /tmp/manifest.json)
+          echo "Image digest: ${DIGEST}"
+          
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Image verified: ${IMAGE}@${DIGEST}"
+
+      - name: Verify CI workflow succeeded for this SHA (HARD GATE)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA="${{ inputs.release_sha }}"
+          REPO="${{ github.repository }}"
+          
+          echo "Checking CI workflow status for SHA: ${SHA}"
+          
+          CI_RUNS=$(gh api "repos/$REPO/actions/runs?head_sha=${SHA}&status=success&per_page=100" \
+            --jq '[.workflow_runs[] | select(.name == "CI")] | length' || echo "0")
+          
+          if [[ "$CI_RUNS" -eq 0 ]]; then
+            echo "ERROR: CI workflow has NOT succeeded for SHA ${SHA}"
+            echo "Production deployment BLOCKED — CI must pass before production deployment."
+            exit 1
+          fi
+          
+          echo "CI verification: ${CI_RUNS} successful CI run(s) found"
+          echo "GATE: PASS — CI verified"
+
+      - name: Verify staging deployment (HARD GATE)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA="${{ inputs.release_sha }}"
+          SERVICE="${{ inputs.service-name }}"
+          REPO="${{ github.repository }}"
+          
+          echo "Checking for staging deployment of SHA: ${SHA}"
+          
+          # Look for staging deployment workflow runs for this SHA
+          STAGING_RUNS=$(gh api "repos/$REPO/actions/runs?head_sha=${SHA}&status=success&per_page=100" \
+            --jq '[.workflow_runs[] | select(.name | test("Deploy to Staging|staging"; "i"))] | length' || echo "0")
+          
+          if [[ "$STAGING_RUNS" -eq 0 ]]; then
+            echo "ERROR: SHA ${SHA} has NOT been successfully deployed to staging."
+            echo "Production deployment BLOCKED — staging verification is required."
+            echo ""
+            echo "To proceed:"
+            echo "  1. Deploy this SHA to staging first"
+            echo "  2. Verify staging deployment succeeded"
+            echo "  3. Re-trigger production deployment"
+            exit 1
+          fi
+          
+          echo "Staging deployment verified: ${STAGING_RUNS} successful staging run(s) found"
+          echo "GATE: PASS — production deployment may proceed"
+
+  deploy:
+    name: Deploy to Production
+    needs: validate
+    runs-on: [self-hosted]
+    environment: production
+    steps:
+      - name: Record deployment start
+        env:
+          SERVICE: ${{ inputs.service-name }}
+          SHA: ${{ inputs.release_sha }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
+          IMAGE_DIGEST: ${{ needs.validate.outputs.image_digest }}
+          CHANGE_REF: ${{ inputs.change_reference }}
+        run: |
+          echo "=== Production Deployment Started ==="
+          echo "Service:        ${SERVICE}"
+          echo "Release SHA:    ${SHA}"
+          echo "Image Tag:      ${IMAGE_TAG}"
+          echo "Image Digest:   ${IMAGE_DIGEST}"
+          echo "Change Ref:     ${CHANGE_REF:-<none>}"
+          echo "Timestamp:      $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Actor:          ${{ github.actor }}"
+          echo "======================================"
+
+      - name: Deploy to production
+        env:
+          SERVICE: ${{ inputs.service-name }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/vayva_prod
+          chmod 600 ~/.ssh/vayva_prod
+          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/vayva_prod "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" \
+            "/opt/vayva/scripts/deploy-service.sh '${SERVICE}' '${IMAGE_TAG}' --migrate"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/vayva_prod
+
+      - name: Record deployment completion
+        if: success()
+        env:
+          SERVICE: ${{ inputs.service-name }}
+          SHA: ${{ inputs.release_sha }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image_tag }}
+          IMAGE_DIGEST: ${{ needs.validate.outputs.image_digest }}
+        run: |
+          echo "=== Production Deployment Complete ==="
+          echo "Service:        ${SERVICE}"
+          echo "Release SHA:    ${SHA}"
+          echo "Image Tag:      ${IMAGE_TAG}"
+          echo "Image Digest:   ${IMAGE_DIGEST}"
+          echo "Timestamp:      $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Status:         SUCCESS"
+          echo "======================================"
