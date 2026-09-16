@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Validate Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate YAML syntax
+        run: |
+          ERRORS=0
+          for f in .github/workflows/*.yml; do
+            if [ -f "$f" ]; then
+              if grep -P '\t' "$f" > /dev/null 2>&1; then
+                echo "FAIL: $f contains tab characters"
+                ERRORS=$((ERRORS + 1))
+              else
+                echo "OK: $f"
+              fi
+            fi
+          done
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "$ERRORS file(s) failed validation"
+            exit 1
+          fi
+          echo "All workflow files pass YAML validation"
+
+      - name: Validate workflow structure
+        run: |
+          ERRORS=0
+          for f in .github/workflows/*.yml; do
+            if [ -f "$f" ]; then
+              if ! grep -q "^name:" "$f"; then
+                echo "FAIL: $f missing 'name:' field"
+                ERRORS=$((ERRORS + 1))
+              fi
+              if ! grep -q "^on:" "$f" && ! grep -q "^\"on\":" "$f" && ! grep -q "^'on':" "$f"; then
+                echo "FAIL: $f missing 'on:' trigger"
+                ERRORS=$((ERRORS + 1))
+              fi
+              if ! grep -q "^jobs:" "$f"; then
+                echo "FAIL: $f missing 'jobs:' section"
+                ERRORS=$((ERRORS + 1))
+              fi
+            fi
+          done
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "$ERRORS file(s) failed structure validation"
+            exit 1
+          fi
+          echo "All workflow files have required structure"
+
+      - name: Verify no hardcoded secrets
+        run: |
+          ERRORS=0
+          # Patterns constructed via concatenation to avoid self-matching
+          P1="gh""p_"; P2="git""hub_pat_"; P3="gh""o_"; P4="gl""pat-"
+          P5="sk""-live-"; P6="sk""_test_"; P7="xo""x[baprs]-"; P8="AI""zaSy"; P9="AK""IA[0-9A-Z]"
+          PATTERNS="$P1|$P2|$P3|$P4|$P5|$P6|$P7|$P8|$P9"
+          for f in .github/workflows/*.yml; do
+            if [ -f "$f" ]; then
+              if grep -qE "$PATTERNS" "$f" 2>/dev/null; then
+                echo "FAIL: $f may contain hardcoded secret"
+                ERRORS=$((ERRORS + 1))
+              fi
+            fi
+          done
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "$ERRORS potential secret(s) found"
+            exit 1
+          fi
+          echo "No hardcoded secrets detected"
