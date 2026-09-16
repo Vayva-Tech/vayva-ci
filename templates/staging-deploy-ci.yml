@@ -1,0 +1,29 @@
+# Staging deployment workflow — calls Vayva-Tech/vayva-ci reusable workflow
+# Copy this file to .github/workflows/deploy-staging.yml in your service repo.
+# Update service-name to match your service.
+#
+# This workflow is triggered manually (workflow_dispatch) and deploys a specific
+# SHA to staging. The SHA must have been built by CI first.
+
+name: Deploy to Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Git SHA to deploy (40-character commit hash)'
+        required: true
+        type: string
+      change_reference:
+        description: 'Optional: PR/issue/ticket reference for audit trail'
+        required: false
+        type: string
+
+jobs:
+  deploy-staging:
+    uses: Vayva-Tech/vayva-ci/.github/workflows/staging-deploy.yml@v1
+    with:
+      service-name: SERVICE_NAME        # e.g. identity-service
+      release_sha: ${{ inputs.release_sha }}
+      change_reference: ${{ inputs.change_reference }}
+    secrets: inherit
