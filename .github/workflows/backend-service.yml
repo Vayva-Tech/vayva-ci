@@ -161,6 +161,8 @@ jobs:
             done <<< "$SMOKE_EXTRA"
           fi
 
+          docker rm -f "vayva-smoke-${SERVICE}" 2>/dev/null || true
+
           CID=$(docker run -d -p ${PORT}:${PORT} \
             -e PORT=${PORT} \
             -e NODE_ENV=production \
