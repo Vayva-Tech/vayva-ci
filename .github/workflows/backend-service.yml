@@ -36,8 +36,33 @@ jobs:
     name: Validate
     runs-on: self-hosted
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vayva_test
+          POSTGRES_PASSWORD: vayva_test_password
+          POSTGRES_DB: vayva_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       PNPM_MINIMUM_RELEASE_AGE: "0"
+      DATABASE_URL: postgresql://vayva_test:vayva_test_password@localhost:5432/vayva_test
+      REDIS_URL: redis://localhost:6379
     steps:
       - name: Checkout
         uses: actions/checkout@v4
