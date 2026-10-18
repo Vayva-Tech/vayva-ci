@@ -106,7 +106,7 @@ jobs:
   deploy:
     name: Deploy to Staging
     needs: validate
-    runs-on: [self-hosted]
+    runs-on: ubuntu-latest
     environment: staging
     steps:
       - name: Record deployment start
