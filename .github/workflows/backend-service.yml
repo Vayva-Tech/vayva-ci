@@ -191,7 +191,7 @@ jobs:
             -e NODE_ENV=production \
             -e DATABASE_URL="postgresql://vayva:vayva@127.0.0.1:1/vayva_smoke" \
             -e REDIS_URL="redis://127.0.0.1:1" \
-            -e ENABLE_SERVICE_AUTH="false" \
+            -e ENABLE_SERVICE_AUTH="true" \
             -e JWT_PUBLIC_KEY="$JWT_PUB" \
             -e JWT_PRIVATE_KEY="$JWT_PRIV" \
             -e EVENT_SIGNING_SECRET="ci-test-signing-secret-do-not-use-in-prod" \
@@ -216,6 +216,7 @@ jobs:
             -e MONNIFY_API_KEY="ci-smoke-test-dummy" \
             -e MONNIFY_SECRET_KEY="ci-smoke-test-dummy" \
             -e KYC_ENCRYPTION_KEY="0000000000000000000000000000000000000000000000000000000000000000" \
+            -e NOTIFICATION_SERVICE_KEY="ci-smoke-test-dummy" \
             $EXTRA_FLAGS \
             --name "vayva-smoke-${SERVICE}" \
             "vayva-ci/${SERVICE}:${SHA}")
