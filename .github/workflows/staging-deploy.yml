@@ -55,19 +55,6 @@ jobs:
           fi
           echo "SHA format: OK"
 
-      - name: Verify SHA exists in repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          SHA="${{ inputs.release_sha }}"
-          REPO="${{ github.repository }}"
-          
-          if ! gh api "repos/$REPO/commits/$SHA" --silent 2>/dev/null; then
-            echo "ERROR: SHA $SHA does not exist in repository $REPO"
-            exit 1
-          fi
-          echo "SHA exists in repository: OK"
-
       - name: Verify GHCR image exists
         id: resolve
         env:
@@ -77,28 +64,22 @@ jobs:
         run: |
           IMAGE_TAG="sha-${SHA}"
           OWNER="${{ github.repository_owner }}"
-          
+
           echo "Checking for image: ghcr.io/${OWNER}/${SERVICE}:${IMAGE_TAG}"
-          
-          # Use GitHub API to verify the package version exists
+
           if ! VERSION_JSON=$(gh api "/orgs/${OWNER}/packages/container/${SERVICE}/versions" 2>/dev/null); then
             echo "ERROR: Failed to query package versions for ${SERVICE}"
             exit 1
           fi
-          
-          # Check if our specific tag exists
+
           if ! echo "${VERSION_JSON}" | jq -e ".[] | select(.metadata.container.tags[] == \"${IMAGE_TAG}\")" > /dev/null 2>&1; then
             echo "ERROR: Image tag ${IMAGE_TAG} does not exist in GHCR for ${SERVICE}"
-            echo "This SHA may not have been built by CI yet."
             echo "Available tags:"
             echo "${VERSION_JSON}" | jq -r '.[].metadata.container.tags[]' | head -10
             exit 1
           fi
-          
-          # Extract digest
+
           DIGEST=$(echo "${VERSION_JSON}" | jq -r ".[] | select(.metadata.container.tags[] == \"${IMAGE_TAG}\") | .name" | head -1)
-          echo "Image digest: ${DIGEST}"
-          
           echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
           echo "image_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
           echo "Image verified: ghcr.io/${OWNER}/${SERVICE}:${IMAGE_TAG}@${DIGEST}"
@@ -135,8 +116,8 @@ jobs:
           printf '%s\n' "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/vayva_staging
           chmod 600 ~/.ssh/vayva_staging
           printf '%s\n' "$STAGING_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          
-          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/vayva_staging "${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}" \
+
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -i ~/.ssh/vayva_staging "${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}" \
             "/opt/vayva-staging/infrastructure-staging/scripts/deploy-staging.sh '${SERVICE}' '${IMAGE_TAG}' --migrate"
 
       - name: Cleanup SSH key
