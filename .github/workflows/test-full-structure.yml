@@ -1,0 +1,52 @@
+name: Test With Env And Perms
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        required: true
+        type: string
+      release_sha:
+        required: true
+        type: string
+    secrets:
+      STAGING_SSH_KEY:
+        required: true
+      STAGING_SSH_HOST:
+        required: true
+      STAGING_SSH_USER:
+        required: true
+
+concurrency:
+  group: test-${{ inputs.service-name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  STAGING_SSH_KNOWN_HOSTS: |
+    13.140.159.213 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHSOnPRo9XffQN/8rN4Ym4X3ZK6gLq4Zuph4ANxF9/ex
+    13.140.159.213 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC9eRZRRNWuzHwxX6iJ2cAhn+Xvs7V2uhrsLs016OHtbsLuUQGdUz/6/cKchiqW7sHB1+4AmRM26RhEtUZECzDx4dBe1MA55CtdXJbzZsacC8k4PIkW8f1dryJhNGBE05MOO/Ost6Q7ZLwzgARBE8cIjE1qpuHT3LQ2KPbglDIKYCxK8AbCmaZ3MjoHLcgr+e5VUUewW6zM7F+bvOYiZQ7Q3T3/qvuJtCS45I7XAyxvpAa+zp/5Q3K2y9W1ke+CTBeUc1H7krAnYrbnw936tFf5cVr9nMrEnU6i4U/7uYCtUxl1VcBxaQrN0kdfuC9pk/ua1tnpqH1m6zbzUj9pwLmjs9IhZT6NTt/Pu20RCTflHcQ77eZ/0Fjs53lAnMpzGyI7WnfwquzokLT6XToyFwqNGfwSz/ZE1QVcXJwfSNWX/EfAwgR6ftJQH0G7boDlM5NbMidAL7fbozPxvJyKJrhgsfC26BOskPqQnx5/UDLvZmK+zV7eipr8gHu94LWeSdk=
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.resolve.outputs.image_tag }}
+    steps:
+      - name: Validate
+        id: resolve
+        run: |
+          echo "image_tag=sha-${{ inputs.release_sha }}" >> "$GITHUB_OUTPUT"
+          echo "Validated ${{ inputs.service-name }}"
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: |
+          echo "Deploying ${{ inputs.service-name }} with tag ${{ needs.validate.outputs.image_tag }}"
+          echo "Known hosts env: ${STAGING_SSH_KNOWN_HOSTS:0:30}..."
