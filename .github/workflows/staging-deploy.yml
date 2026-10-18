@@ -138,7 +138,7 @@ jobs:
           printf '%s\n' "$STAGING_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           
           ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/vayva_staging "${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}" \
-            "/opt/vayva-staging/scripts/deploy-service.sh '${SERVICE}' '${IMAGE_TAG}' --migrate"
+            "/opt/vayva-staging/infrastructure-staging/scripts/deploy-staging.sh '${SERVICE}' '${IMAGE_TAG}' --migrate"
 
       - name: Cleanup SSH key
         if: always()
