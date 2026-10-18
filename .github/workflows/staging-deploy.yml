@@ -24,10 +24,6 @@ on:
       STAGING_SSH_USER:
         required: true
 
-concurrency:
-  group: staging-${{ inputs.service-name }}
-  cancel-in-progress: false
-
 permissions:
   contents: read
   packages: read
