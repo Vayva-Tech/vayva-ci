@@ -44,7 +44,7 @@ jobs:
           POSTGRES_PASSWORD: vayva_test_password
           POSTGRES_DB: vayva_test
         ports:
-          - 25432:5432
+          - 5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -53,7 +53,7 @@ jobs:
       redis:
         image: redis:7
         ports:
-          - 26379:6379
+          - 6379
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -61,8 +61,8 @@ jobs:
           --health-retries 5
     env:
       PNPM_MINIMUM_RELEASE_AGE: "0"
-      DATABASE_URL: postgresql://vayva_test:vayva_test_password@localhost:25432/vayva_test
-      REDIS_URL: redis://localhost:26379
+      DATABASE_URL: postgresql://vayva_test:vayva_test_password@postgres:5432/vayva_test
+      REDIS_URL: redis://redis:6379
     steps:
       - name: Checkout
         uses: actions/checkout@v4
