@@ -36,7 +36,7 @@ env:
 jobs:
   validate:
     name: Validate Release
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       image_tag: ${{ steps.resolve.outputs.image_tag }}
       image_digest: ${{ steps.resolve.outputs.image_digest }}
@@ -83,7 +83,7 @@ jobs:
   deploy:
     name: Deploy to Staging
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Record deployment start
         env:

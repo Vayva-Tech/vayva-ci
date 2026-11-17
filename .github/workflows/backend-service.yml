@@ -16,6 +16,15 @@ on:
         required: false
         default: ''
         type: string
+      optional-gates:
+        description: >-
+          Comma-separated list of gates this repository legitimately does not
+          implement (e.g. "lint"). A gate that is not listed here and has no
+          matching package.json script FAILS the build instead of being
+          skipped. Leave empty to require every gate.
+        required: false
+        default: ''
+        type: string
     secrets:
       NPM_TOKEN:
         required: true
@@ -102,35 +111,69 @@ jobs:
         run: npx prisma generate
 
       - name: Lint
+        env:
+          OPTIONAL_GATES: ${{ inputs.optional-gates }}
         run: |
           if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['lint'] ? 0 : 1)"; then
             pnpm --config.minimum-release-age=0 lint
+          elif node -e "const opt=(process.env.OPTIONAL_GATES||'').split(',').map(s=>s.trim()).filter(Boolean); process.exit(opt.includes('lint')?0:1)"; then
+            echo "No lint script; gate declared optional by the caller"
           else
-            echo "No lint script; skipping"
+            echo "::error::Required gate 'lint' is missing from package.json scripts. Add a 'lint' script, or declare 'lint' in the optional-gates input of this reusable workflow call. Skipping a gate is not allowed by default."
+            exit 1
           fi
 
       - name: Typecheck
+        env:
+          OPTIONAL_GATES: ${{ inputs.optional-gates }}
         run: |
           if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['typecheck'] ? 0 : 1)"; then
             pnpm --config.minimum-release-age=0 typecheck
+          elif node -e "const opt=(process.env.OPTIONAL_GATES||'').split(',').map(s=>s.trim()).filter(Boolean); process.exit(opt.includes('typecheck')?0:1)"; then
+            echo "No typecheck script; gate declared optional by the caller"
           else
-            echo "No typecheck script; skipping"
+            echo "::error::Required gate 'typecheck' is missing from package.json scripts. Add a 'typecheck' script, or declare 'typecheck' in the optional-gates input of this reusable workflow call. Skipping a gate is not allowed by default."
+            exit 1
           fi
 
       - name: Test
+        env:
+          OPTIONAL_GATES: ${{ inputs.optional-gates }}
         run: |
           if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['test'] ? 0 : 1)"; then
             pnpm --config.minimum-release-age=0 test
+          elif node -e "const opt=(process.env.OPTIONAL_GATES||'').split(',').map(s=>s.trim()).filter(Boolean); process.exit(opt.includes('test')?0:1)"; then
+            echo "No test script; gate declared optional by the caller"
           else
-            echo "No test script; skipping"
+            echo "::error::Required gate 'test' is missing from package.json scripts. Add a 'test' script, or declare 'test' in the optional-gates input of this reusable workflow call. Skipping a gate is not allowed by default."
+            exit 1
+          fi
+
+      - name: Test Coverage (enforce thresholds)
+        env:
+          OPTIONAL_GATES: ${{ inputs.optional-gates }}
+        run: |
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['test'] ? 0 : 1)"; then
+            # Run tests with coverage to enforce thresholds defined in vitest.config.ts
+            pnpm --config.minimum-release-age=0 test --coverage
+          elif node -e "const opt=(process.env.OPTIONAL_GATES||'').split(',').map(s=>s.trim()).filter(Boolean); process.exit(opt.includes('test')?0:1)"; then
+            echo "No test script; coverage gate declared optional by the caller"
+          else
+            echo "::error::Required gate 'test' is missing from package.json scripts, so the coverage gate cannot run. Add a 'test' script, or declare 'test' in the optional-gates input of this reusable workflow call."
+            exit 1
           fi
 
       - name: Build
+        env:
+          OPTIONAL_GATES: ${{ inputs.optional-gates }}
         run: |
           if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['build'] ? 0 : 1)"; then
             pnpm --config.minimum-release-age=0 build
+          elif node -e "const opt=(process.env.OPTIONAL_GATES||'').split(',').map(s=>s.trim()).filter(Boolean); process.exit(opt.includes('build')?0:1)"; then
+            echo "No build script; gate declared optional by the caller"
           else
-            echo "No build script; skipping"
+            echo "::error::Required gate 'build' is missing from package.json scripts. Add a 'build' script, or declare 'build' in the optional-gates input of this reusable workflow call. Skipping a gate is not allowed by default."
+            exit 1
           fi
 
       - name: Cleanup
